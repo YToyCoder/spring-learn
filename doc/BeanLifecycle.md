@@ -126,12 +126,117 @@ BeanPostProcessor提供一些bean的后置处理方法的接口,这些接口的�
 
 #### InstantiationAwareBeanPostProcessor
 
-1、postProcessBeforeInstantiation调用时机为bean实例化(Instantiation)之前 如果返回了bean实例, 则会替代原来正常通过target bean生成的bean的流程. 典型的例如aop返回proxy对象. 此时bean的执行流程将会缩短, 只会执行 
-
- BeanPostProcessor#postProcessAfterInitialization接口完成初始化。
+1、postProcessBeforeInstantiation调用时机为bean实例化(Instantiation)之前 如果返回了bean实例, 则会替代原来正常通过target bean生成的bean的流程. 典型的例如aop返回proxy对象. 此时bean的执行流程将会缩短, 只会执行 BeanPostProcessor#postProcessAfterInitialization接口完成初始化。
 
 2、postProcessAfterInstantiation调用时机为bean实例化(Instantiation)之后和任何初始化(Initialization)之前。
 
 3、postProcessProperties调用时机为postProcessAfterInstantiation执行之后并返回true, 返回的PropertyValues将作用于给定bean属性赋值. spring 5.1之后出现以替换@Deprecated标注的postProcessPropertyValues
 
-4、postProcessPropertyValues已经被标注@Deprecated，后续将会被postProcessProperties取代。
+
+验证`postProcessBeforeInstantiation`方法,代码。
+
+```java
+
+  static final Object obj = new Object();
+  static final String pre_new_name = "pre_new_name";
+
+  static class PrenewObjProcessor implements InstantiationAwareBeanPostProcessor {
+
+    @Override
+    public Object postProcessBeforeInstantiation(Class<?> beanClass, String beanName){
+      return Objects.equals( beanName, pre_new_name ) ? obj : null;
+    }
+  }
+
+
+  @Bean
+  public PrenewObjProcessor prenewObjProcessor(){
+    return new PrenewObjProcessor();
+  }
+
+  @Bean
+  public Object pre_new_name(){
+    return null;
+  }
+
+  @Bean
+  public TestDriver test(@Qualifier(pre_new_name) Object obj){
+    return new TestDriver(obj);
+  }
+
+
+  public static class TestDriver implements DisposableBean{
+    private Object obj;
+
+    public TestDriver(Object _obj){
+      obj = _obj;
+    }
+
+    @Override
+    public void destroy() throws Exception {
+      log.info("static obj and autwired bean is equal ? " + Objects.equals(this.obj, RegistProcessors.obj));
+    }
+  }
+```
+如果`postProcessBeforeInstantiation`正常运行，TestDriver的obj和static的obj应该相等。
+
+日志打印结果:
+
+```
+2022-08-08 16:50:51.000  INFO 55500 --- [ionShutdownHook] com.example.demo.CommonUse.RegisteBeans  : destroy by DisposableBean
+2022-08-08 16:50:51.001  INFO 55500 --- [ionShutdownHook] c.e.demo.CommonUse.RegistProcessors      : static obj and autwired bean is equal ? true
+2022-08-08 16:50:51.002  INFO 55500 --- [ionShutdownHook] com.example.demo.CommonUse.RegisteBeans  : destroy
+```
+
+验证`postProcessAfterInitialization`方法，代码：
+
+```java
+
+  static class PropertiesBean{
+    String JavaHome;
+    public PropertiesBean (){
+      JavaHome = "not set";
+    }
+
+    @Value("${JAVA_HOME}")
+    public void jh(String jh){
+      JavaHome = jh;
+    }
+  }
+
+  public static class StopSetPropertiesProcessor implements InstantiationAwareBeanPostProcessor{
+
+    @Override
+    public boolean postProcessAfterInstantiation(Object bean, String beanName){
+      return ! (bean instanceof PropertiesBean );
+    }
+
+  }
+
+  @Bean
+  public PropertiesBean propertiesBean(){
+    return new PropertiesBean();
+  }
+
+  @Bean
+  public StopSetPropertiesProcessor stopSetPropertiesProcessor(){
+    return new StopSetPropertiesProcessor();
+  }
+
+  @Bean
+  public DisposableBean postProcessAfterInstantiationDriver (PropertiesBean propertiesBean){
+    return () -> {
+      log.info(propertiesBean.JavaHome);
+    };
+  }
+
+```
+
+`StopSetPropertiesProcessor`会阻止`PropertiesBean`设置属性(@Autowired), 在最后的时候应该打印`not set`.
+
+日志打印结果:
+
+```
+2022-08-08 17:19:25.487  INFO 53656 --- [ionShutdownHook] com.example.demo.CommonUse.RegisteBeans  : destroy by DisposableBean
+2022-08-08 17:19:25.488  INFO 53656 --- [ionShutdownHook] c.e.demo.CommonUse.RegistProcessors      : not set
+```
