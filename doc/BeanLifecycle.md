@@ -124,7 +124,7 @@ BeanPostProcessor提供一些bean的后置处理方法的接口,这些接口的�
               Destroy (销毁)
 ```
 
-#### InstantiationAwareBeanPostProcessor
+#### 2.1 InstantiationAwareBeanPostProcessor
 
 1、postProcessBeforeInstantiation调用时机为bean实例化(Instantiation)之前 如果返回了bean实例, 则会替代原来正常通过target bean生成的bean的流程. 典型的例如aop返回proxy对象. 此时bean的执行流程将会缩短, 只会执行 BeanPostProcessor#postProcessAfterInitialization接口完成初始化。
 
@@ -240,3 +240,163 @@ BeanPostProcessor提供一些bean的后置处理方法的接口,这些接口的�
 2022-08-08 17:19:25.487  INFO 53656 --- [ionShutdownHook] com.example.demo.CommonUse.RegisteBeans  : destroy by DisposableBean
 2022-08-08 17:19:25.488  INFO 53656 --- [ionShutdownHook] c.e.demo.CommonUse.RegistProcessors      : not set
 ```
+
+#### `AbstractAutwireCapableBeanFactory`部分源码
+
+`AbstractAutwireCapableBeanFactory#createBean`源码在`doCreateBean`调用了`resolveBeforeInstantiation`
+
+```java
+
+	/**
+	 * Central method of this class: creates a bean instance,
+	 * populates the bean instance, applies post-processors, etc.
+	 * @see #doCreateBean
+	 */
+	@Override
+	protected Object createBean(String beanName, RootBeanDefinition mbd, @Nullable Object[] args)
+			throws BeanCreationException {
+
+		if (logger.isTraceEnabled()) {
+			logger.trace("Creating instance of bean '" + beanName + "'");
+		}
+		RootBeanDefinition mbdToUse = mbd;
+
+		// Make sure bean class is actually resolved at this point, and
+		// clone the bean definition in case of a dynamically resolved Class
+		// which cannot be stored in the shared merged bean definition.
+		Class<?> resolvedClass = resolveBeanClass(mbd, beanName);
+		if (resolvedClass != null && !mbd.hasBeanClass() && mbd.getBeanClassName() != null) {
+			mbdToUse = new RootBeanDefinition(mbd);
+			mbdToUse.setBeanClass(resolvedClass);
+		}
+
+		// Prepare method overrides.
+		try {
+			mbdToUse.prepareMethodOverrides();
+		}
+		catch (BeanDefinitionValidationException ex) {
+			throw new BeanDefinitionStoreException(mbdToUse.getResourceDescription(),
+					beanName, "Validation of method overrides failed", ex);
+		}
+
+		try {
+			// Give BeanPostProcessors a chance to return a proxy instead of the target bean instance.
+			Object bean = resolveBeforeInstantiation(beanName, mbdToUse);
+			if (bean != null) {
+				return bean;
+			}
+		}
+		catch (Throwable ex) {
+			throw new BeanCreationException(mbdToUse.getResourceDescription(), beanName,
+					"BeanPostProcessor before instantiation of bean failed", ex);
+		}
+
+		try {
+			Object beanInstance = doCreateBean(beanName, mbdToUse, args);
+			if (logger.isTraceEnabled()) {
+				logger.trace("Finished creating instance of bean '" + beanName + "'");
+			}
+			return beanInstance;
+		}
+		catch (BeanCreationException | ImplicitlyAppearedSingletonException ex) {
+			// A previously detected exception with proper bean creation context already,
+			// or illegal singleton state to be communicated up to DefaultSingletonBeanRegistry.
+			throw ex;
+		}
+		catch (Throwable ex) {
+			throw new BeanCreationException(
+					mbdToUse.getResourceDescription(), beanName, "Unexpected exception during bean creation", ex);
+		}
+	}
+```
+
+```java
+
+	/**
+	 * Apply before-instantiation post-processors, resolving whether there is a
+	 * before-instantiation shortcut for the specified bean.
+	 * @param beanName the name of the bean
+	 * @param mbd the bean definition for the bean
+	 * @return the shortcut-determined bean instance, or {@code null} if none
+	 */
+	@Nullable
+	protected Object resolveBeforeInstantiation(String beanName, RootBeanDefinition mbd) {
+		Object bean = null;
+		if (!Boolean.FALSE.equals(mbd.beforeInstantiationResolved)) {
+			// Make sure bean class is actually resolved at this point.
+			if (!mbd.isSynthetic() && hasInstantiationAwareBeanPostProcessors()) {
+				Class<?> targetType = determineTargetType(beanName, mbd);
+				if (targetType != null) {
+					bean = applyBeanPostProcessorsBeforeInstantiation(targetType, beanName);
+					if (bean != null) {
+						bean = applyBeanPostProcessorsAfterInitialization(bean, beanName);
+					}
+				}
+			}
+			mbd.beforeInstantiationResolved = (bean != null);
+		}
+		return bean;
+	}
+
+
+	/**
+	 * Apply InstantiationAwareBeanPostProcessors to the specified bean definition
+	 * (by class and name), invoking their {@code postProcessBeforeInstantiation} methods.
+	 * <p>Any returned object will be used as the bean instead of actually instantiating
+	 * the target bean. A {@code null} return value from the post-processor will
+	 * result in the target bean being instantiated.
+	 * @param beanClass the class of the bean to be instantiated
+	 * @param beanName the name of the bean
+	 * @return the bean object to use instead of a default instance of the target bean, or {@code null}
+	 * @see InstantiationAwareBeanPostProcessor#postProcessBeforeInstantiation
+	 */
+	@Nullable
+	protected Object applyBeanPostProcessorsBeforeInstantiation(Class<?> beanClass, String beanName) {
+		for (InstantiationAwareBeanPostProcessor bp : getBeanPostProcessorCache().instantiationAware) {
+			Object result = bp.postProcessBeforeInstantiation(beanClass, beanName);
+			if (result != null) {
+				return result;
+			}
+		}
+		return null;
+	}
+
+
+	@Override
+	public Object applyBeanPostProcessorsAfterInitialization(Object existingBean, String beanName)
+			throws BeansException {
+
+		Object result = existingBean;
+		for (BeanPostProcessor processor : getBeanPostProcessors()) {
+			Object current = processor.postProcessAfterInitialization(result, beanName);
+			if (current == null) {
+				return result;
+			}
+			result = current;
+		}
+		return result;
+	}
+```
+
+根据上面的源码可以看出，如果`InstantiationAwareBeanPostProcessor#postProcessBeforeInstantiation`实例化对象之后，会直接执行`InstantiationAwareBeanPostProcessor#postProcessAfterInitialization`，并不会去通过BeanFactory实例化对象。
+
+该逻辑可以参考如下方法:
+
+```java
+
+  try {
+    // Give BeanPostProcessors a chance to return a proxy instead of the target bean instance.
+    Object bean = resolveBeforeInstantiation(beanName, mbdToUse);
+    if (bean != null) {
+      return bean;
+    }
+  }
+  catch (Throwable ex) {
+    throw new BeanCreationException(mbdToUse.getResourceDescription(), beanName,
+        "BeanPostProcessor before instantiation of bean failed", ex);
+  }
+
+```
+
+
+#### 2.2 BeanPostProcessor 
