@@ -124,7 +124,26 @@ BeanPostProcessor提供一些bean的后置处理方法的接口,这些接口的�
               Destroy (销毁)
 ```
 
+BeanPostProcessor的`postProcessAfterInitialization`和`postProcessBeforeInitialization`方法的返回值都会替换原本的`bean`.
 
+```java
+
+public interface BeanPostProcessor {
+
+	@Nullable
+	default Object postProcessBeforeInitialization(Object bean, String beanName) throws BeansException {
+		return bean;
+	}
+
+
+	@Nullable
+	default Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
+		return bean;
+	}
+
+}
+
+```
 #### 2.1 BeanPostProcessor的五大接口
 
 1. BeanPostProcessor
