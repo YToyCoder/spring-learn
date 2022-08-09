@@ -9,7 +9,7 @@
 ### 1 Bean生命周期
 
 ```
- Instantiation (实例化 - new) -->  Properties(属性赋值 - do autwire)  --> Initialization (初始化 - init | PosConstruct) --> Destruction (销毁 - destroy PreDestroy)
+ Instantiation (实例化 - new) -->  Properties(属性赋值 - do @Autwired | @Value | @Resource)  --> Initialization (初始化 - init | PosConstruct) --> Destruction (销毁 - destroy PreDestroy)
 ```
 
 查看以下类的打印结果
@@ -124,7 +124,96 @@ BeanPostProcessor提供一些bean的后置处理方法的接口,这些接口的�
               Destroy (销毁)
 ```
 
-#### 2.1 InstantiationAwareBeanPostProcessor
+
+#### 2.1 BeanPostProcessor的五大接口
+
+1. BeanPostProcessor
+
+对象初始化前后的回调
+
+2. InstantiationAwareBeanPostProcessor
+
+对象实例化前后的回调处理
+
+3. SmartInstantiationAwareBeanPostProcessor
+
+spring框架内部使用的接口
+
+```java
+public interface SmartInstantiationAwareBeanPostProcessor extends InstantiationAwareBeanPostProcessor {
+    //用来返回目标对象的类型（比如代理对象通过raw class获取proxy type 用于类型匹配）
+    @Nullable
+    default Class<?> predictBeanType(Class<?> beanClass, String beanName) throws BeansException {
+        return null;
+    }
+    //这里提供一个拓展点用来解析获取用来实例化的构造器（比如未通过bean定义构造器以及参数的情况下，会根据这个回调来确定构造器）
+    @Nullable
+    default Constructor<?>[] determineCandidateConstructors(Class<?> beanClass, String beanName)
+            throws BeansException {
+        return null;
+    }
+    //获取要提前暴露的bean的引用，用来支持单例对象的循环引用（一般是bean自身，如果是代理对象则需要取用代理引用）
+    default Object getEarlyBeanReference(Object bean, String beanName) throws BeansException {
+        return bean;
+    }
+}
+```
+
+4. MergedBeanDefinitionPostProcessor
+
+用来将merged BeanDefinition暴露出来的回调
+
+在bean实例化完毕后调用 可以用来修改merged BeanDefinition的一些properties 或者用来给后续回调中缓存一些meta信息使用这个算是将merged BeanDefinition暴露出来的一个回调
+
+5. DestructionAwareBeanPostProcessor
+
+关于处理对象销毁的前置回调
+
+关于BeanPostProcessor中各个回调调用的顺序
+
+```
+                BeanDefinition
+                    ||
+                    ||  <------------------+  postProcessBeforeInstantiation
+                    \/                     |
+                Instantiation(实例化)       +-------- InstantiationAwareBeanPostProcessor
+                    ||                     |
+                    ||  <------------------+ postProcessAfterInitialization
+                    \/
+              setProperties(属性赋值)
+                    ||
+                    || <------------------+ postProcessBeforeInstantiation
+                    \/                    |
+              Intitializing(初始化)        +--------- BeanPostProcessor
+                    ||                    |
+                    || <------------------+ postProcessAfterInitialization
+                    ||                    
+                    || <--------------- DefaultSingletonBeanRegistry#postProcessBeforeDestruction
+                    \/
+              Destroy (销毁)
+```
+
+1、InstantiationAwareBeanPostProcessor.postProcessBeforeInstantiation(beanClass, beanName)该方法在创建对象之前会先掉用，如果有返回实例则直接使用不会去走下面创建对象的逻辑，并在之后执行BeanPostProcessor.postProcessAfterInitialization(result, beanName)
+
+2、SmartInstantiationAwareBeanPostProcessor.determineCandidateConstructors(beanClass, beanName)如果需要的话，会在实例化对象之前执行
+
+3、MergedBeanDefinitionPostProcessor.postProcessMergedBeanDefinition(mbd, beanType, beanName)在对象实例化完毕 初始化之前执行
+
+4、InstantiationAwareBeanPostProcessor.postProcessAfterInstantiation(bw.getWrappedInstance(), beanName)在bean创建完毕初始化之前执行
+
+5、InstantiationAwareBeanPostProcessor.postProcessPropertyValues(pvs, filteredPds, bw.getWrappedInstance(), beanName)在bean的property属性注入完毕 向bean中设置属性之前执行
+
+6、BeanPostProcessor.postProcessBeforeInitialization(result, beanName)在bean初始化（自定义init或者是实现了InitializingBean.afterPropertiesSet()）之前执行
+
+7、BeanPostProcessor.postProcessAfterInitialization(result, beanName)在bean初始化（自定义init或者是实现了InitializingBean.afterPropertiesSet()）之后执行
+
+8、其中DestructionAwareBeanPostProcessor方法的postProcessBeforeDestruction(Object bean, String beanName)会在销毁对象前执行
+
+*参考*
+
+[BeanPostProcessor的五大接口] (https://www.cnblogs.com/zhangjianbin/p/10059191.html)
+
+#### 2.2 InstantiationAwareBeanPostProcessor
 
 1、postProcessBeforeInstantiation调用时机为bean实例化(Instantiation)之前 如果返回了bean实例, 则会替代原来正常通过target bean生成的bean的流程. 典型的例如aop返回proxy对象. 此时bean的执行流程将会缩短, 只会执行 BeanPostProcessor#postProcessAfterInitialization接口完成初始化。
 
