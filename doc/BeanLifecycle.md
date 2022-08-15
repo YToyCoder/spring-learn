@@ -508,3 +508,37 @@ public interface SmartInstantiationAwareBeanPostProcessor extends InstantiationA
 
 
 #### 2.2 BeanPostProcessor 
+
+##### 2.2.1 AutowiredAnnotationBeanPostProcessor
+
+用于处理`@Autowired`,`@Value`注解
+
+**技术细节**
+
+`AutowiredAnnotationBeanPostProcessor#postProcessProperties`
+
+`AutowiredAnnotationBeanPostProcessor`将依赖封装到`InjectionMetadata`,封装过程通过查找`Field`和`Method`的注解判断是否存在依赖将依赖信息添加到`InjectionMetadata`里面,
+在`InjectionMetadata#inject`时通过`BeanFactory#resolveDependency`获取依赖的bean
+
+*源码*
+
+```java
+public class Container {
+
+  @Override
+  public PropertyValues postProcessProperties(PropertyValues pvs, Object bean, String beanName) {
+    InjectionMetadata metadata = findAutowiringMetadata(beanName, bean.getClass(), pvs);
+    try {
+      metadata.inject(bean, beanName, pvs);
+    }
+    catch (BeanCreationException ex) {
+      throw ex;
+    }
+    catch (Throwable ex) {
+      throw new BeanCreationException(beanName, "Injection of autowired dependencies failed", ex);
+    }
+    return pvs;
+  }
+
+}
+```
