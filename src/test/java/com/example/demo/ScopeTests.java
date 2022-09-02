@@ -7,6 +7,7 @@ import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 
 import com.example.demo.scope.Bean;
 import com.example.demo.scope.ThreadScope;
+import com.example.demo.utils.Utils;
 
 public class ScopeTests {
 

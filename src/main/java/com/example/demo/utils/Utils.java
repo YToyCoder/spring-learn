@@ -1,4 +1,4 @@
-package com.example.demo;
+package com.example.demo.utils;
 
 import org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor;
 import org.springframework.beans.factory.config.BeanDefinition;
