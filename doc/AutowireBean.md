@@ -164,3 +164,21 @@ bean xml的根元素为beans,注意根元素有个 default-autowire 属性,这�
 
 </beans>
 ```
+
+### 6 Depend-On
+
+> depend-on指定的bean在当前bean之前先创建好,销毁的时候在当前bean之后进行销毁。
+
+```xml
+
+<bean id="bean" class="bean-class" depend-on="bean1,bean2;bean4 bean5" />
+
+```
+
+> depend-on:设置当前bean依赖的bean名称,可以指定多个,多个之间可以用”,;空格“进行分割
+
+### 7 primary
+
+当希望从容器中获取到一个bean对象的时候,容器中却找到了多个匹配的bean,会抛出`org.springframework.beans.factory.NoUniqueBeanDefinitionException`异常.
+
+spring中可以通过bean元素的primary属性来解决这个问题,可以通过这个属性来指定当前bean为主要候选者,当容器查询一个bean的时候,如果容器中有多个候选者匹配的时候,此时spring会返回主要的候选者。
